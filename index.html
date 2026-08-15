@@ -381,12 +381,16 @@ function monthKey(d){ return d ? d.slice(0,7) : 'unknown'; }
 function monthLabel(key){
   if(key==='all') return 'All time';
   const [y,m] = key.split('-');
-  return new Date(parseInt(y), parseInt(m)-1, 1).toLocaleDateString('en-IN',{month:'short', year:'numeric'});
+  const d = new Date(parseInt(y), parseInt(m)-1, 1);
+  return isNaN(d) ? key : d.toLocaleDateString('en-IN',{month:'short', year:'numeric'});
 }
 function getYears(){ return Array.from(new Set(TXNS.map(t=>t.date && t.date.slice(0,4)).filter(Boolean))).sort().reverse(); }
 function getMonths(){ return Array.from(new Set(TXNS.map(t=>monthKey(t.date)))).filter(k=>k!=='unknown').sort().reverse(); }
 function getDays(){ return Array.from(new Set(TXNS.map(t=>t.date).filter(Boolean))).sort().reverse(); }
-function dayLabel(d){ return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function dayLabel(d){
+  const dt = new Date(d+'T00:00:00');
+  return isNaN(dt) ? d : dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
 
 function renderMonthSelect(){
   const modeSel = document.getElementById('filterMode');
@@ -397,19 +401,20 @@ function renderMonthSelect(){
     return;
   }
   let options = [];
-  if(filterMode === 'year') options = getYears();
-  else if(filterMode === 'month') options = getMonths();
-  else if(filterMode === 'day') options = getDays();
+  let allLabel = 'All';
+  if(filterMode === 'year'){ options = getYears(); allLabel = 'All Years'; }
+  else if(filterMode === 'month'){ options = getMonths(); allLabel = 'All Months'; }
+  else if(filterMode === 'day'){ options = getDays(); allLabel = 'All Days'; }
   valSel.style.display = 'inline-block';
-  valSel.innerHTML = options.map(v=>{
+  valSel.innerHTML = `<option value="all">${allLabel}</option>` + options.map(v=>{
     const label = filterMode==='month' ? monthLabel(v) : (filterMode==='day' ? dayLabel(v) : v);
     return `<option value="${v}">${label}</option>`;
   }).join('');
-  if(!options.includes(filterValue)) filterValue = options[0] || 'all';
-  valSel.value = filterValue;
+  valSel.value = options.includes(filterValue) ? filterValue : 'all';
+  filterValue = valSel.value;
 }
 function monthTxns(){
-  if(filterMode === 'all') return TXNS;
+  if(filterMode === 'all' || filterValue === 'all') return TXNS;
   if(filterMode === 'year') return TXNS.filter(t=>t.date && t.date.slice(0,4)===filterValue);
   if(filterMode === 'month') return TXNS.filter(t=>monthKey(t.date)===filterValue);
   if(filterMode === 'day') return TXNS.filter(t=>t.date===filterValue);
