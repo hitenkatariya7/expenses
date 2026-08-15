@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<title>Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #0C0C0F;
+    --surface: #17171B;
+    --surface-2: #1E1E24;
+    --border: #2A2A31;
+    --ink: #ECE8DF;
+    --ink-soft: #9B978C;
+    --ink-faint: #5E5B54;
+    --gold: #C6A15B;
+    --gold-dim: #C6A15B99;
+    --gold-soft: #C6A15B1F;
+    --red: #C97A6D;
+    --radius: 14px;
+    --display: 'Cormorant Garamond', Georgia, serif;
+    --sans: 'Manrope', -apple-system, sans-serif;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    min-height:100vh; padding-bottom: 100px; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background: var(--gold-soft); }
+
+  /* ---------------- lock screen ---------------- */
+  #lockScreen{
+    position:fixed; inset:0; background:
+      radial-gradient(circle at 50% 15%, #1A1A20 0%, #0C0C0F 60%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:100; padding: 24px;
+  }
+  .lock-mark{
+    width:44px; height:44px; border:1px solid var(--gold-dim); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; margin-bottom:22px;
+    position:relative;
+  }
+  .lock-mark::before{ content:"◆"; color:var(--gold); font-size:13px; }
+  .lock-title{ font-family: var(--display); font-size:26px; font-weight:600; letter-spacing:0.03em; color: var(--ink); margin-bottom:6px; }
+  .lock-sub{ font-size:11.5px; color: var(--ink-faint); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:34px; }
+  .pin-dots{ display:flex; gap:16px; margin-bottom: 34px; }
+  .pin-dot{ width:11px; height:11px; border-radius:50%; border:1px solid var(--gold-dim); transition: all 0.15s; }
+  .pin-dot.filled{ background: var(--gold); border-color: var(--gold); }
+  .pin-dot.error{ border-color: var(--red); background: var(--red); }
+  .keypad{ display:grid; grid-template-columns: repeat(3, 64px); gap: 14px; }
+  .key{
+    width:64px; height:64px; border-radius:50%; border:1px solid var(--border); background: var(--surface);
+    color: var(--ink); font-family: var(--display); font-size:22px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition: all 0.12s;
+  }
+  .key:active{ background: var(--gold-soft); border-color: var(--gold-dim); }
+  .key.ghost{ background:transparent; border:none; color: var(--ink-faint); font-family: var(--sans); font-size:13px; }
+  .lock-error{ color: var(--red); font-size:11.5px; letter-spacing:0.04em; margin-top:22px; opacity:0; transition: opacity 0.2s; height:14px; }
+  .lock-error.show{ opacity:1; }
+
+  /* ---------------- app shell ---------------- */
+  #app{ display:none; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding: 22px 18px 16px; border-bottom:1px solid var(--border); }
+  .topbar h1{ font-family: var(--display); font-weight:600; font-size:26px; margin:0; letter-spacing:0.01em; }
+  .topbar .sub{ font-size:10.5px; color: var(--ink-faint); margin-top:3px; letter-spacing:0.03em; }
+  select.month-select{
+    font-family: var(--sans); font-size:12px; font-weight:500; color: var(--ink);
+    background: var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 10px; max-width:128px;
+  }
+  .sync-dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background: var(--gold); margin-right:5px; box-shadow: 0 0 6px var(--gold); }
+
+  .tabs{ display:flex; border-bottom:1px solid var(--border); padding: 0 18px; gap:24px; }
+  .tab{
+    font-family: var(--sans); font-size:13px; font-weight:600; color: var(--ink-faint);
+    padding: 14px 0 12px; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; letter-spacing:0.01em;
+  }
+  .tab.active{ color: var(--gold); border-bottom-color: var(--gold); }
+
+  .content{ padding: 18px 18px 4px; }
+
+  .section{ margin-bottom: 24px; }
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:11px; }
+  .section-head h2{ font-family: var(--display); font-size:18px; font-weight:600; margin:0; letter-spacing:0.01em; }
+  .section-head .meta{ font-size:10.5px; color: var(--ink-faint); }
+  .panel{ background: var(--surface); border:1px solid var(--border); border-radius: var(--radius); padding: 4px 14px; }
+
+  .rank-row{ display:flex; align-items:center; gap:10px; padding: 11px 0; border-bottom:1px solid var(--border); }
+  .rank-row:last-child{ border-bottom:none; }
+  .rank-row .name{ font-size:12.5px; font-weight:500; width:98px; flex:0 0 98px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color: var(--ink); }
+  .rank-track{ flex:1; height:5px; background: var(--surface-2); border-radius:3px; overflow:hidden; }
+  .rank-fill{ height:100%; background: linear-gradient(90deg, var(--gold-dim), var(--gold)); border-radius:3px; }
+  .rank-row .amt{ font-family: var(--display); font-size:14px; font-weight:600; width:70px; flex:0 0 70px; text-align:right; color: var(--gold); }
+  .rank-row .pct{ font-size:9.5px; color: var(--ink-faint); width:30px; flex:0 0 30px; text-align:right; }
+
+  .cat-group{ border-bottom:1px solid var(--border); }
+  .cat-group:last-child{ border-bottom:none; }
+  .cat-head{ display:flex; align-items:center; justify-content:space-between; padding:13px 0; cursor:pointer; }
+  .cat-head .left{ display:flex; align-items:center; gap:9px; }
+  .cat-head .chev{ font-size:9px; color: var(--gold-dim); transition: transform 0.15s; }
+  .cat-head.open .chev{ transform: rotate(90deg); }
+  .cat-head .cname{ font-size:13.5px; font-weight:600; color: var(--ink); }
+  .cat-head .ctotal{ font-family: var(--display); font-size:15px; font-weight:600; color: var(--gold); }
+  .sub-list{ display:none; padding: 0 0 11px 17px; }
+  .sub-list.open{ display:block; }
+  .sub-row{ display:flex; align-items:center; gap:8px; padding: 6px 0; }
+  .sub-row .sname{ font-size:11.5px; color: var(--ink-soft); width:86px; flex:0 0 86px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sub-row .rank-track{ height:4px; }
+  .sub-row .samt{ font-family: var(--display); font-size:12px; color: var(--ink-soft); width:58px; flex:0 0 58px; text-align:right; }
+
+  .stat-strip{ display:flex; gap:10px; margin-bottom: 22px; }
+  .stat-box{ flex:1; background: var(--surface); border:1px solid var(--border); border-radius: var(--radius); padding: 13px 14px; }
+  .stat-box .label{ font-size:9.5px; color: var(--ink-faint); text-transform:uppercase; letter-spacing:0.06em; }
+  .stat-box .value{ font-family: var(--display); font-size:20px; font-weight:600; margin-top:5px; color: var(--gold); }
+
+  .filter-row{ display:flex; gap:8px; margin-bottom:15px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .filter-row::-webkit-scrollbar{ display:none; }
+  select.filter, input.search{
+    font-family: var(--sans); font-size:12px; padding: 9px 11px; border-radius:9px;
+    border:1px solid var(--border); background: var(--surface); color: var(--ink); flex:0 0 auto;
+  }
+  input.search{ flex:1 1 140px; min-width:120px; }
+  input.search::placeholder{ color: var(--ink-faint); }
+
+  .day-block{ margin-bottom: 18px; }
+  .day-head{ display:flex; align-items:baseline; justify-content:space-between; padding: 2px 0 9px; }
+  .day-head .d1{ font-family: var(--display); font-weight:600; font-size:16px; }
+  .day-head .d2{ font-size:10px; color: var(--ink-faint); margin-left:7px; letter-spacing:0.02em; }
+  .day-head .total{ font-family: var(--display); font-size:14px; font-weight:600; color: var(--gold); }
+
+  .txn{ display:flex; align-items:center; gap:10px; padding: 12px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+  .txn:last-child{ border-bottom:none; }
+  .txn .mid{ flex:1; min-width:0; }
+  .txn .detail{ font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color: var(--ink); }
+  .txn .tags{ font-size:10px; color: var(--ink-faint); margin-top:3px; letter-spacing:0.01em; }
+  .txn .bank-pill{ font-size:9px; color: var(--gold-dim); border:1px solid var(--gold-dim); border-radius:5px; padding:1px 5px; margin-left:6px; }
+  .txn .amt{ font-family: var(--display); font-weight:600; font-size:14.5px; flex:0 0 auto; color: var(--ink); }
+  .edit-icon{ font-size:11px; color: var(--ink-faint); flex:0 0 auto; }
+
+  .totals-row{ display:flex; align-items:center; gap:10px; padding: 12px 0; border-bottom:1px solid var(--border); }
+  .totals-row:last-child{ border-bottom:none; }
+  .totals-row .date{ width:110px; flex:0 0 110px; }
+  .totals-row .date .d1{ font-size:13px; font-weight:600; color: var(--ink); }
+  .totals-row .date .d2{ font-size:9.5px; color: var(--ink-faint); }
+  .totals-row .rank-track{ flex:1; }
+  .totals-row .amt{ font-family: var(--display); font-size:14px; font-weight:600; width:70px; flex:0 0 70px; text-align:right; color: var(--gold); }
+  canvas#trendChart{ max-height:150px; margin-bottom:20px; }
+
+  .empty{ text-align:center; padding:60px 20px; color: var(--ink-faint); }
+  .empty p{ font-size:13px; margin-top:8px; }
+
+  .fab{
+    position:fixed; right:18px; bottom:22px; width:54px; height:54px; border-radius:50%;
+    background: var(--gold); color: #0C0C0F; border:none; font-size:26px; line-height:1;
+    box-shadow: 0 8px 20px rgba(198,161,91,0.28); cursor:pointer; z-index:20;
+    display:flex; align-items:center; justify-content:center; font-weight:600;
+  }
+
+  .sheet-backdrop{ position:fixed; inset:0; background: rgba(0,0,0,0.6); z-index:30; display:none; align-items:flex-end; justify-content:center; }
+  .sheet-backdrop.open{ display:flex; }
+  .sheet{ background: var(--surface); border:1px solid var(--border); width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 18px 24px; max-height:88vh; overflow-y:auto; animation: slideup 0.2s ease-out; }
+  @keyframes slideup{ from{ transform:translateY(14px); opacity:0;} to{ transform:translateY(0); opacity:1; } }
+  .sheet h2{ font-family: var(--display); font-size:20px; font-weight:600; margin:0 0 16px; display:flex; justify-content:space-between; align-items:center; }
+  .sheet h2 .close{ font-size:19px; color: var(--ink-faint); cursor:pointer; padding:4px 8px; font-family: var(--sans); }
+  .field{ margin-bottom:13px; }
+  .field label{ display:block; font-size:10.5px; color: var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; }
+  .field .hint{ font-size:9.5px; color: var(--ink-faint); text-transform:none; letter-spacing:0; margin-left:6px; opacity:0.7; }
+  .field input, .field select{ width:100%; font-family: var(--sans); font-size:14.5px; padding:11px 12px; border-radius:10px; border:1px solid var(--border); background: var(--surface-2); color: var(--ink); }
+  .field-row{ display:flex; gap:10px; }
+  .field-row .field{ flex:1; }
+  .sheet-actions{ display:flex; gap:10px; margin-top:16px; }
+  .btn{ flex:1; padding:13px 0; border-radius:11px; border:none; font-family: var(--sans); font-weight:600; font-size:14px; cursor:pointer; }
+  .btn.primary{ background: var(--gold); color:#0C0C0F; }
+  .btn.ghost{ background: var(--surface-2); color: var(--ink-soft); }
+  .btn.danger{ background:transparent; color: var(--red); border:1px solid var(--red); }
+
+  .toast{ position:fixed; top:14px; left:50%; transform:translateX(-50%); background: var(--surface); border:1px solid var(--gold-dim); color: var(--ink); font-size:12.5px; padding:9px 16px; border-radius:20px; z-index:50; opacity:0; pointer-events:none; transition:opacity 0.25s, transform 0.25s; }
+  .toast.show{ opacity:1; transform: translateX(-50%) translateY(6px); }
+  .loading{ text-align:center; padding:70px 0; color: var(--ink-faint); font-size:12px; letter-spacing:0.03em; }
+</style>
+</head>
+<body>
+
+<div id="lockScreen">
+  <div class="lock-mark"></div>
+  <div class="lock-title">The Ledger</div>
+  <div class="lock-sub">Enter passcode</div>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+  </div>
+  <div class="keypad" id="keypad">
+    <button class="key" data-k="1">1</button><button class="key" data-k="2">2</button><button class="key" data-k="3">3</button>
+    <button class="key" data-k="4">4</button><button class="key" data-k="5">5</button><button class="key" data-k="6">6</button>
+    <button class="key" data-k="7">7</button><button class="key" data-k="8">8</button><button class="key" data-k="9">9</button>
+    <div></div><button class="key" data-k="0">0</button><button class="key ghost" data-k="del">⌫</button>
+  </div>
+  <div class="lock-error" id="lockError">Incorrect passcode</div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div>
+      <h1>The Ledger</h1>
+      <div class="sub" id="entryCount"><span class="sync-dot"></span>— entries</div>
+    </div>
+    <select class="month-select" id="monthSelect"></select>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-view="overview">Overview</button>
+    <button class="tab" data-view="daily">Daily Expenses</button>
+    <button class="tab" data-view="totals">Daily Totals</button>
+  </div>
+
+  <div class="content" id="content"><div class="loading">Loading…</div></div>
+
+  <button class="fab" id="fabAdd" aria-label="Add expense">+</button>
+</div>
+
+<div class="sheet-backdrop" id="sheetBackdrop">
+  <div class="sheet">
+    <h2><span id="sheetTitle">New Entry</span><span class="close" id="sheetClose">✕</span></h2>
+    <input type="hidden" id="editId">
+    <div class="field-row">
+      <div class="field"><label>Date</label><input type="date" id="fDate"></div>
+      <div class="field"><label>Amount (₹)</label><input type="number" id="fAmount" inputmode="decimal" placeholder="0"></div>
+    </div>
+    <div class="field"><label>Detail</label><input type="text" id="fDetail" placeholder="e.g. Lunch, Metro to office…"></div>
+    <div class="field-row">
+      <div class="field"><label>Category<span class="hint">type to add new</span></label>
+        <input list="categoryList" id="fCategory" placeholder="Choose or type new">
+        <datalist id="categoryList"></datalist>
+      </div>
+      <div class="field"><label>Sub category<span class="hint">type to add new</span></label>
+        <input list="subcategoryList" id="fSubcategory" placeholder="Choose or type new">
+        <datalist id="subcategoryList"></datalist>
+      </div>
+    </div>
+    <div class="field"><label>Bank / Account</label>
+      <input list="bankList" id="fBank" placeholder="e.g. BOB, HSBC…">
+      <datalist id="bankList"></datalist>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn danger" id="deleteBtn" style="display:none;">Delete</button>
+      <button class="btn ghost" id="cancelBtn">Cancel</button>
+      <button class="btn primary" id="saveBtn">Save entry</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   1. GOOGLE SHEET LINK — paste your Apps Script Web App URL here
+   ========================================================= */
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxLQMZ7lxQxmUG513f5WXlyOKUIELH2s6O8LY4w3lznJ4azihXs_Ku32RmyEn7hpbMh/exec";
+
+/* =========================================================
+   2. PASSCODE — change this to whatever numeric PIN you like
+   ========================================================= */
+const PASSCODE = "0154";
+
+/* =========================================================
+   3. Starting data — only used ONCE, the very first time this
+      dashboard connects to an empty Firestore database.
+   ========================================================= */
+const SEED = [{"date": "2025-09-02", "detail": "Pandal Hopping - Ganpati - Food", "category": "Personal Expense", "subcategory": "Food", "amount": 190.0, "bank": "", "id": null}, {"date": "2025-09-02", "detail": "Pandal Hopping - Ganpati - Jhumke", "category": "Personal Expense", "subcategory": "Misc.", "amount": 320.0, "bank": "", "id": null}, {"date": "2025-09-04", "detail": "Face Wash", "category": "Personal Expense", "subcategory": "Groceries", "amount": 125.0, "bank": "", "id": null}, {"date": "2025-09-06", "detail": "Housie", "category": "Personal Expense", "subcategory": "Fun", "amount": 100.0, "bank": "", "id": null}, {"date": "2025-09-06", "detail": "Medicine", "category": "Home", "subcategory": "Tablets", "amount": 21.0, "bank": "", "id": null}, {"date": "2025-09-08", "detail": "Petrol - RE", "category": "Petrol", "subcategory": "Thunderbird", "amount": 560.0, "bank": "", "id": null}, {"date": "2025-09-09", "detail": "Panchvati Ticket (Hiten)", "category": "Professional Expense", "subcategory": "Travel", "amount": 111.0, "bank": "", "id": null}, {"date": "2025-09-09", "detail": "Panchvati Ticket (Bhairavi)", "category": "Personal Expense", "subcategory": "Travel", "amount": 111.0, "bank": "", "id": null}, {"date": "2025-09-10", "detail": "Coffee", "category": "Personal Expense", "subcategory": "Food", "amount": 80.0, "bank": "", "id": null}, {"date": "2025-09-11", "detail": "Panchvati Ticket (Hiten)", "category": "Professional Expense", "subcategory": "Travel", "amount": 127.0, "bank": "", "id": null}, {"date": "2025-09-11", "detail": "Local Ticket", "category": "Professional Expense", "subcategory": "Travel", "amount": 20.0, "bank": "", "id": null}, {"date": "2025-09-11", "detail": "Water Bottle", "category": "Professional Expense", "subcategory": "Food", "amount": 15.0, "bank": "", "id": null}, {"date": "2025-09-11", "detail": "office Lunch (Hiten & jyotsana)", "category": "Professional Expense", "subcategory": "Food", "amount": 300.0, "bank": "", "id": null}, {"date": "2025-09-04", "detail": "Soychaap", "category": "Personal Expense", "subcategory": "Food", "amount": 103.0, "bank": "", "id": null}, {"date": "2025-09-04", "detail": "Kylaq - petrol", "category": "Petrol", "subcategory": "Kylaq", "amount": 1100.0, "bank": "", "id": null}, {"date": "2025-08-31", "detail": "MBA - EMI", "category": "EMI", "subcategory": "MBA", "amount": 5000.0, "bank": "", "id": null}, {"date": "2025-09-05", "detail": "Conjuring - movie", "category": "Personal Expense", "subcategory": "Fun", "amount": 370.8, "bank": "", "id": null}, {"date": "2025-09-11", "detail": "Personal Expense", "category": "Personal Expense", "subcategory": "Misc.", "amount": 100.0, "bank": "", "id": null}, {"date": "2025-09-14", "detail": "Seat Cover", "category": "Personal Expense", "subcategory": "Vehicle Repair", "amount": 400.0, "bank": "", "id": null}, {"date": "2025-09-14", "detail": "Personal Expense", "category": "Personal Expense", "subcategory": "Misc.", "amount": 10.0, "bank": "", "id": null}, {"date": "2025-09-14", "detail": "Chinese Rice", "category": "Personal Expense", "subcategory": "Food", "amount": 90.0, "bank": "", "id": null}, {"date": "2025-09-16", "detail": "Kylaq - petrol", "category": "Petrol", "subcategory": "Kylaq", "amount": 2000.0, "bank": "", "id": null}, {"date": "2025-09-19", "detail": "Groceries ", "category": "Home", "subcategory": "Groceries", "amount": 365.0, "bank": "", "id": null}, {"date": "2025-09-20", "detail": "Water Bottles Mami Shrad", "category": "Home", "subcategory": "Misc.", "amount": 130.0, "bank": "", "id": null}, {"date": "2025-09-20", "detail": "Dabeli (Friends)", "category": "Personal Expense", "subcategory": "Food", "amount": 180.0, "bank": "", "id": null}, {"date": "2025-09-21", "detail": "Milk", "category": "Home", "subcategory": "Groceries", "amount": 30.0, "bank": "", "id": null}, {"date": "2025-09-22", "detail": "Coconut for Pooja", "category": "Home", "subcategory": "Misc.", "amount": 40.0, "bank": "", "id": null}, {"date": "2025-09-23", "detail": "Garba Paas", "category": "Personal Expense", "subcategory": "Fun", "amount": 230.0, "bank": "", "id": null}, {"date": "2025-09-23", "detail": "Fevikwik", "category": "Personal Expense", "subcategory": "Misc.", "amount": 20.0, "bank": "", "id": null}, {"date": "2025-09-24", "detail": "Garba - Bhel / Water / Vada Pav / noodles", "category": "Personal Expense", "subcategory": "Food", "amount": 355.0, "bank": "", "id": null}, {"date": "2025-09-25", "detail": "Iphone Screen Guard", "category": "Personal Expense", "subcategory": "Misc.", "amount": 50.0, "bank": "", "id": null}, {"date": "2025-09-26", "detail": "Rock & Roll ", "category": "Personal Expense", "subcategory": "Food", "amount": 60.0, "bank": "", "id": null}, {"date": "2025-09-26", "detail": "Activa - Petrol", "category": "Petrol", "subcategory": "Activa", "amount": 150.0, "bank": "", "id": null}, {"date": "2025-09-26", "detail": "Rajma chawal - Uday", "category": "Personal Expense", "subcategory": "Food", "amount": 170.0, "bank": "", "id": null}, {"date": "2025-09-26", "detail": "Garba Pass - Akash", "category": "Personal Expense", "subcategory": "Fun", "amount": 200.0, "bank": "", "id": null}, {"date": "2025-09-27", "detail": "Netflix", "category": "Subscription", "subcategory": "Netflix", "amount": 200.0, "bank": "", "id": null}, {"date": "2025-09-27", "detail": "Milk", "category": "Home", "subcategory": "Groceries", "amount": 30.0, "bank": "", "id": null}, {"date": "2025-09-28", "detail": "Ice-cream / Mayo", "category": "Home", "subcategory": "Groceries", "amount": 220.0, "bank": "", "id": null}, {"date": "2025-09-28", "detail": "Lays", "category": "Personal Expense", "subcategory": "Food", "amount": 30.0, "bank": "", "id": null}, {"date": "2025-09-28", "detail": "RE - Petrol", "category": "Petrol", "subcategory": "Thunderbird", "amount": 550.0, "bank": "", "id": null}, {"date": "2025-09-29", "detail": "Panchvati ticket", "category": "Professional Expense", "subcategory": "Travel", "amount": 117.0, "bank": "", "id": null}, {"date": "2025-09-30", "detail": "Personal Expense", "category": "Personal Expense", "subcategory": "Food", "amount": 165.0, "bank": "", "id": null}, {"date": "2025-09-19", "detail": "Food", "category": "Personal Expense", "subcategory": "Food", "amount": 53.0, "bank": "", "id": null}, {"date": "2025-09-08", "detail": "House party - Gungun", "category": "Personal Expense", "subcategory": "Food", "amount": 200.0, "bank": "", "id": null}, {"date": "2025-09-21", "detail": "Kylaq - EMI", "category": "EMI", "subcategory": "Kylaq", "amount": 20000.0, "bank": "", "id": null}, {"date": "2025-10-01", "detail": "Local Ticket", "category": "Professional Expense", "subcategory": "Travel", "amount": 10.0, "bank": "", "id": null}, {"date": "2025-10-01", "detail": "Panchvati / Vidharba Ticket", "category": "Personal Expense", "subcategory": "Travel", "amount": 724.0, "bank": "", "id": null}, {"date": "2025-10-01", "detail": "Mumbai - Hell & Chaas", "category": "Professional Expense", "subcategory": "Food", "amount": 145.0, "bank": "", "id": null}, {"date": "2025-10-01", "detail": "Rickshaw", "category": "Professional Expense", "subcategory": "Travel", "amount": 30.0, "bank": "", "id": null}, {"date": "2025-10-02", "detail": "Activa - Dicky Wire", "category": "Vehicle Repair", "subcategory": "Activa", "amount": 40.0, "bank": "", "id": null}, {"date": "2025-10-02", "detail": "Garba Jacket - Rent", "category": "Personal Expense", "subcategory": "Fun", "amount": 200.0, "bank": "", "id": null}, {"date": "2025-10-03", "detail": "Kyalq - Petrol", "category": "Petrol", "subcategory": "Kylaq", "amount": 700.0, "bank": "", "id": null}, {"date": "2025-10-03", "detail": "Personal Expenses - B", "category": "Personal Expense", "subcategory": "Food", "amount": 438.0, "bank": "", "id": null}, {"date": "2025-10-04", "detail": "Kyalq - Nitrogen", "category": "Vehicle Repair", "subcategory": "Kylaq", "amount": 40.0, "bank": "", "id": null}, {"date": "2025-10-04", "detail": "Staycation - Igatpuri", "category": "Personal Expense", "subcategory": "Fun", "amount": 1932.0, "bank": "", "id": null}, {"date": "2025-10-08", "detail": "Vadapav", "category": "Personal Expense", "subcategory": "Food", "amount": 41.0, "bank": "", "id": null}, {"date": "2025-10-08", "detail": "Personal Expenses - B - Zepto", "category": "Personal Expense", "subcategory": "Food", "amount": 94.42, "bank": "", "id": null}, {"date": "2025-10-08", "detail": "Biryani - Office Lunch", "category": "Personal Expense", "subcategory": "Food", "amount": 117.5, "bank": "", "id": null}, {"date": "2025-10-09", "detail": "Mom's Flipkart Parcel", "category": "Home", "subcategory": "Misc.", "amount": 129.0, "bank": "", "id": null}, {"date": "2025-10-10", "detail": "Marker - Shop", "category": "Home", "subcategory": "Misc.", "amount": 40.0, "bank": "", "id": null}, {"date": "2025-10-16", "detail": "Activa - Petrol", "category": "Petrol", "subcategory": "Activa", "amount": 220.0, "bank": "", "id": null}, {"date": "2025-10-16", "detail": "Haircut", "category": "Personal Expense", "subcategory": "Misc.", "amount": 200.0, "bank": "", "id": null}, {"date": "2025-10-17", "detail": "Thunder - Petrol", "category": "Petrol", "subcategory": "Thunderbird", "amount": 220.0, "bank": "", "id": null}, {"date": "2025-10-18", "detail": "Pani puri | Sev | ETC", "category": "Home", "subcategory": "Groceries", "amount": 265.0, "bank": "", "id": null}, {"date": "2025-10-19", "detail": "Snacks - Chana chor 3 pckts", "category": "Personal Expense", "subcategory": "Food", "amount": 60.0, "bank": "", "id": null}, {"date": "2025-10-19", "detail": "Mitali - Momoms", "category": "Personal Expense", "subcategory": "Food", "amount": 110.0, "bank": "", "id": null}, {"date": "2025-10-19", "detail": "Snacks", "category": "Personal Expense", "subcategory": "Food", "amount": 10.0, "bank": "", "id": null}, {"date": "2025-10-20", "detail": "Groceries", "category": "Home", "subcategory": "Groceries", "amount": 170.0, "bank": "", "id": null}, {"date": "2025-10-20", "detail": "Mithai - Diwali", "category": "Home", "subcategory": "Misc.", "amount": 190.0, "bank": "", "id": null}, {"date": "2025-10-20", "detail": "Thunder - Petrol", "category": "Petrol", "subcategory": "Thunderbird", "amount": 330.0, "bank": "", "id": null}, {"date": "2025-10-21", "detail": "Kadai dudh", "category": "Personal Expense", "subcategory": "Food", "amount": 30.0, "bank": "", "id": null}, {"date": "2025-10-21", "detail": "Wellness", "category": "Personal Expense", "subcategory": "Misc.", "amount": 40.0, "bank": "", "id": null}, {"date": "2025-10-23", "detail": "Wellness", "category": "Personal Expense", "subcategory": "Misc.", "amount": 40.0, "bank": "", "id": null}, {"date": "2025-10-23", "detail": "Snacks", "category": "Personal Expense", "subcategory": "Food", "amount": 10.0, "bank": "", "id": null}, {"date": "2025-10-23", "detail": "Unknown", "category": "Dont Remember", "subcategory": "Food", "amount": 146.0, "bank": "", "id": null}, {"date": "2025-10-24", "detail": "Hindustan - Specs", "category": "Personal Expense", "subcategory": "Misc.", "amount": 1250.0, "bank": "", "id": null}, {"date": "2025-10-24", "detail": "Shawarma - Chicken", "category": "Personal Expense", "subcategory": "Food", "amount": 100.0, "bank": "", "id": null}, {"date": "2025-10-24", "detail": "Unknown", "category": "Dont Remember", "subcategory": "Food", "amount": 66.0, "bank": "", "id": null}, {"date": "2025-10-24", "detail": "Samrat - Butter Chicken", "category": "Personal Expense", "subcategory": "Food", "amount": 546.0, "bank": "", "id": null}, {"date": "2025-10-24", "detail": "Shop - Chai / Coffee", "category": "Home", "subcategory": "Misc.", "amount": 30.0, "bank": "", "id": null}, {"date": "2025-10-26", "detail": "Chote Miya - Butter Chicken", "category": "Personal Expense", "subcategory": "Food", "amount": 650.0, "bank": "", "id": null}, {"date": "2025-10-27", "detail": "Netflix Subscription", "category": "Subscription", "subcategory": "Netflix", "amount": 199.0, "bank": "", "id": null}, {"date": "2025-10-28", "detail": "Dahi", "category": "Home", "subcategory": "Groceries", "amount": 40.0, "bank": "", "id": null}, {"date": "2025-10-29", "detail": "Panchavati - DVL - DR", "category": "Professional Expense", "subcategory": "Travel", "amount": 127.25, "bank": "", "id": null}, {"date": "2025-10-29", "detail": "Chicken Biryani - Office lunch", "category": "Personal Expense", "subcategory": "Food", "amount": 120.0, "bank": "", "id": null}, {"date": "2025-10-30", "detail": "Rikshaw | Train | Local", "category": "Professional Expense", "subcategory": "Travel", "amount": 97.0, "bank": "", "id": null}, {"date": "2025-10-31", "detail": "Sevagram - KYN - DVL", "category": "Personal Expense", "subcategory": "Travel", "amount": 192.25, "bank": "", "id": null}, {"date": "2025-10-31", "detail": "Butter Chicken - Tiffin Tales", "category": "Home", "subcategory": "Food", "amount": 230.0, "bank": "", "id": null}, {"date": "2025-10-01", "detail": "Mela", "category": "Personal Expense", "subcategory": "Fun", "amount": 166.0, "bank": "", "id": null}, {"date": "2025-10-11", "detail": "YT Premium Subscription", "category": "Subscription", "subcategory": "YT Premium", "amount": 89.0, "bank": "", "id": null}, {"date": "2025-10-18", "detail": "Blinkit (bangles) - B", "category": "Personal Expense", "subcategory": "Misc.", "amount": 262.0, "bank": "", "id": null}, {"date": "2025-10-26", "detail": "Idea - Recharge", "category": "Personal Expense", "subcategory": "Recharge", "amount": 994.0, "bank": "", "id": null}, {"date": "2025-10-27", "detail": "Kylaq - EMI", "category": "EMI", "subcategory": "Kylaq", "amount": 20000.0, "bank": "", "id": null}, {"date": "2025-10-11", "detail": "MBA - EMI", "category": "EMI", "subcategory": "MBA", "amount": 5000.0, "bank": "", "id": null}, {"date": "2025-10-25", "detail": "SIP", "category": "Investment", "subcategory": "SIP", "amount": 2000.0, "bank": "", "id": null}, {"date": "2025-10-30", "detail": "Shadi (Gourav's Brother) - Gift & Travel", "category": "Personal Expense", "subcategory": "Misc.", "amount": 302.83, "bank": "", "id": null}, {"date": "2025-11-01", "detail": "RE - Petrol", "category": "Petrol", "subcategory": "Thunderbird", "amount": 105.0, "bank": "BOB", "id": null}, {"date": "2025-11-02", "detail": "Groceries", "category": "Home", "subcategory": "Groceries", "amount": 110.0, "bank": "BOB", "id": null}, {"date": "2025-11-03", "detail": "Home - Food (Nikhil - Eat on street & Pushpavihar & Icecream)", "category": "Home", "subcategory": "Food", "amount": 380.0, "bank": "BOB", "id": null}, {"date": "2025-11-03", "detail": "Food - B", "category": "Personal Expense", "subcategory": "Food", "amount": 158.0, "bank": "BOB", "id": null}, {"date": "2025-11-03", "detail": "Food - B", "category": "Personal Expense", "subcategory": "Food", "amount": 180.0, "bank": "Axis", "id": null}, {"date": "2025-11-04", "detail": "RE - Petrol", "category": "Petrol", "subcategory": "Thunderbird", "amount": 550.0, "bank": "BOB", "id": null}, {"date": "2025-11-04", "detail": "Nani - Medicines", "category": "Home", "subcategory": "Tablets", "amount": 360.0, "bank": "BOB", "id": null}, {"date": "2025-11-05", "detail": "Myntra - T shirt ", "category": "Personal Expense", "subcategory": "Clothes", "amount": 332.0, "bank": "Axis", "id": null}, {"date": "2025-11-07", "detail": "Biryani Office", "category": "Personal Expense", "subcategory": "Food", "amount": 200.0, "bank": "BOB", "id": null}, {"date": "2025-11-07", "detail": "Home - Food (papa & hiten) - Celpin", "category": "Home", "subcategory": "Food", "amount": 410.0, "bank": "Axis", "id": null}, {"date": "2025-11-07", "detail": "Kadai Dudh | Chips | Water", "category": "Personal Expense", "subcategory": "Food", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2025-11-08", "detail": "Paan Chocolate - Jail road", "category": "Personal Expense", "subcategory": "Food", "amount": 5.0, "bank": "BOB", "id": null}, {"date": "2025-11-08", "detail": "Choco lava cake - Temptations", "category": "Personal Expense", "subcategory": "Food", "amount": 50.0, "bank": "BOB", "id": null}, {"date": "2025-11-08", "detail": "Groceries", "category": "Home", "subcategory": "Groceries", "amount": 346.0, "bank": "Axis", "id": null}, {"date": "2025-11-08", "detail": "Shani Mandir", "category": "Home", "subcategory": "Misc.", "amount": 20.0, "bank": "BOB", "id": null}, {"date": "2025-11-08", "detail": "Stone - (Doctor & medicines)", "category": "Personal Expense", "subcategory": "Tablets", "amount": 200.0, "bank": "BOB", "id": null}, {"date": "2025-11-09", "detail": "Wellness - B", "category": "Personal Expense", "subcategory": "Food", "amount": 40.0, "bank": "BOB", "id": null}, {"date": "2025-11-10", "detail": "Panchvati Tickets (Including Cancellation)", "category": "Professional Expense", "subcategory": "Travel", "amount": 305.0, "bank": "BOB", "id": null}, {"date": "2025-11-10", "detail": "Medicines (Total 580 - 500 Cash 80 UPI)", "category": "Medical", "subcategory": "Tablets", "amount": 80.0, "bank": "BOB", "id": null}, {"date": "2025-11-12", "detail": "Mom - Water bottles", "category": "Home", "subcategory": "Misc.", "amount": 150.0, "bank": "BOB", "id": null}, {"date": "2025-11-12", "detail": "Beer", "category": "Personal Expense", "subcategory": "Misc.", "amount": 200.0, "bank": "BOB", "id": null}, {"date": "2025-11-12", "detail": "Crispy Shawarma - Cafe 99", "category": "Personal Expense", "subcategory": "Food", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2025-11-14", "detail": "Tiffin Tales - Butter chicken & fried rice", "category": "Home", "subcategory": "Food", "amount": 350.0, "bank": "BOB", "id": null}, {"date": "2025-11-14", "detail": "Gulab Jamun", "category": "Home", "subcategory": "Food", "amount": 125.0, "bank": "BOB", "id": null}, {"date": "2025-11-15", "detail": "Chips", "category": "Personal Expense", "subcategory": "Food", "amount": 20.0, "bank": "BOB", "id": null}, {"date": "2025-11-15", "detail": "Groceries", "category": "Home", "subcategory": "Groceries", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2025-11-15", "detail": "Snacks (lokashrya)", "category": "Home", "subcategory": "Food", "amount": 100.0, "bank": "BOB", "id": null}, {"date": "2025-11-16", "detail": "Haircut & beard", "category": "Personal Expense", "subcategory": "Self Care", "amount": 250.0, "bank": "BOB", "id": null}, {"date": "2025-11-17", "detail": "Rolls (karan & Hiten)", "category": "Personal Expense", "subcategory": "Food", "amount": 50.0, "bank": "BOB", "id": null}, {"date": "2025-11-18", "detail": "Aadhar Card Xerox (passport)", "category": "Dubai", "subcategory": "Dubai - Documentation", "amount": 30.0, "bank": "BOB", "id": null}, {"date": "2025-11-19", "detail": "RE - Petrol", "category": "Petrol", "subcategory": "Thunderbird", "amount": 440.0, "bank": "Axis", "id": null}, {"date": "2025-11-19", "detail": "Documents - Xerox", "category": "Dubai", "subcategory": "Dubai - Documentation", "amount": 35.0, "bank": "BOB", "id": null}, {"date": "2025-11-19", "detail": "RE - Chain Guide", "category": "Personal Expense", "subcategory": "Vehicle Repair", "amount": 240.0, "bank": "BOB", "id": null}, {"date": "2025-11-20", "detail": "Kachori - 3", "category": "Home", "subcategory": "Food", "amount": 105.0, "bank": "BOB", "id": null}, {"date": "2025-11-20", "detail": "Dahi", "category": "Home", "subcategory": "Groceries", "amount": 40.0, "bank": "BOB", "id": null}, {"date": "2025-11-21", "detail": "Uncle & Aunty Vada Sambhar - Panchvati", "category": "Personal Expense", "subcategory": "Food", "amount": 30.0, "bank": "BOB", "id": null}, {"date": "2025-11-21", "detail": "Local travel", "category": "Professional Expense", "subcategory": "Travel", "amount": 20.0, "bank": "BOB", "id": null}, {"date": "2025-11-22", "detail": "Mandir - Saturday", "category": "Personal Expense", "subcategory": "Misc.", "amount": 40.0, "bank": "BOB", "id": null}, {"date": "2025-11-22", "detail": "Vinayak - Food & Travel", "category": "Personal Expense", "subcategory": "Food", "amount": 866.0, "bank": "BOB", "id": null}, {"date": "2025-11-22", "detail": "Sumo Cold", "category": "Medical", "subcategory": "Tablets", "amount": 30.0, "bank": "BOB", "id": null}, {"date": "2025-11-23", "detail": "Home - Food Vinayak", "category": "Home", "subcategory": "Food", "amount": 380.0, "bank": "BOB", "id": null}, {"date": "2025-11-24", "detail": "Panchvati Tickets", "category": "Professional Expense", "subcategory": "Travel", "amount": 102.25, "bank": "BOB", "id": null}, {"date": "2025-11-24", "detail": "Nidhi Birthday (Cake & Gift)", "category": "Personal Expense", "subcategory": "Misc.", "amount": 502.0, "bank": "AU", "id": null}, {"date": "2025-11-25", "detail": "Water Bottle Panchavati", "category": "Personal Expense", "subcategory": "Food", "amount": 20.0, "bank": "BOB", "id": null}, {"date": "2025-11-27", "detail": "Netflix Subscription", "category": "Subscription", "subcategory": "Netflix", "amount": 199.0, "bank": "BOB", "id": null}, {"date": "2025-11-27", "detail": "Temptaions", "category": "Personal Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2025-11-28", "detail": "Chicken mughlai & Naan", "category": "Personal Expense", "subcategory": "Food", "amount": 275.0, "bank": "BOB", "id": null}, {"date": "2025-11-29", "detail": "Groceries", "category": "Home", "subcategory": "Groceries", "amount": 345.0, "bank": "BOB", "id": null}, {"date": "2025-11-30", "detail": "Shawarma", "category": "Personal Expense", "subcategory": "Food", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2025-11-18", "detail": "Passport", "category": "Dubai", "subcategory": "Dubai - Documentation", "amount": 4000.0, "bank": "Axis", "id": null}, {"date": "2025-11-11", "detail": "YT premium Subscription", "category": "Subscription", "subcategory": "YT Premium", "amount": 89.0, "bank": "Axis", "id": null}, {"date": "2025-11-16", "detail": "Waffle", "category": "Personal Expense", "subcategory": "Food", "amount": 190.0, "bank": "AU", "id": null}, {"date": "2025-11-25", "detail": "Kylaq EMI", "category": "EMI", "subcategory": "Kylaq", "amount": 20000.0, "bank": "AU", "id": null}, {"date": "2025-11-30", "detail": "Tere Ishq Mein (Golu & Hiten)", "category": "Personal Expense", "subcategory": "Fun", "amount": 320.8, "bank": "AU", "id": null}, {"date": "2025-11-14", "detail": "De De Pyaar De", "category": "Personal Expense", "subcategory": "Fun", "amount": 160.4, "bank": "AU", "id": null}, {"date": "2025-11-14", "detail": "MBA EMI", "category": "EMI", "subcategory": "MBA", "amount": 5000.0, "bank": "AU", "id": null}, {"date": "2025-12-01", "detail": "Dabeli", "category": "Personal Expense", "subcategory": "Food", "amount": 105.0, "bank": "BOB", "id": null}, {"date": "2025-12-01", "detail": "Shopping at zudio (Sweater & Nail paint)", "category": "Dubai", "subcategory": "Dubai - Shopping", "amount": 978.0, "bank": "Axis", "id": null}, {"date": "2025-12-02", "detail": "Water bottle packet (mom)", "category": "Home", "subcategory": "Misc.", "amount": 150.0, "bank": "BOB", "id": null}, {"date": "2025-12-02", "detail": "Evening Snacks", "category": "Home", "subcategory": "Food", "amount": 72.0, "bank": "BOB", "id": null}, {"date": "2025-12-02", "detail": "Groceries (ashok peswani)", "category": "Home", "subcategory": "Groceries", "amount": 85.0, "bank": "BOB", "id": null}, {"date": "2025-12-03", "detail": "Kachori 3", "category": "Home", "subcategory": "Food", "amount": 105.0, "bank": "BOB", "id": null}, {"date": "2025-12-03", "detail": "Food - Unknown'", "category": "Home", "subcategory": "Food", "amount": 40.0, "bank": "BOB", "id": null}, {"date": "2025-12-03", "detail": "Tiffin tales", "category": "Home", "subcategory": "Food", "amount": 400.0, "bank": "BOB", "id": null}, {"date": "2025-12-03", "detail": "Socks", "category": "Personal Expense", "subcategory": "Clothes", "amount": 90.0, "bank": "BOB", "id": null}, {"date": "2025-12-04", "detail": "Beard", "category": "Personal Expense", "subcategory": "Self Care", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2025-12-05", "detail": "Tyre Pressure - kylaq", "category": "Vehicle Repair / Maintainance", "subcategory": "Kylaq", "amount": 30.0, "bank": "BOB", "id": null}, {"date": "2025-12-09", "detail": "Dhurandar - Movie", "category": "Personal Expense", "subcategory": "Fun", "amount": 223.6, "bank": "BOB", "id": null}, {"date": "2025-12-09", "detail": "Pushpavihar Sev bhaji", "category": "Personal Expense", "subcategory": "Food", "amount": 140.0, "bank": "BOB", "id": null}, {"date": "2025-12-10", "detail": "Evening Snacks", "category": "Home", "subcategory": "Food", "amount": 50.0, "bank": "BOB", "id": null}, {"date": "2025-12-10", "detail": "Gungun Birthday Contribution", "category": "Personal Expense", "subcategory": "Misc.", "amount": 700.0, "bank": "BOB", "id": null}, {"date": "2025-12-12", "detail": "Soups Packets & Chips", "category": "Personal Expense", "subcategory": "Food", "amount": 150.0, "bank": "BOB", "id": null}, {"date": "2025-12-12", "detail": "RT bakery - Doughnuts", "category": "Personal Expense", "subcategory": "Food", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2025-12-13", "detail": "Myntra Shopping", "category": "Dubai", "subcategory": "Dubai - Shopping", "amount": 2819.0, "bank": "Axis", "id": null}, {"date": "2025-12-13", "detail": "Kadai Dudh", "category": "Personal Expense", "subcategory": "Food", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2025-12-14", "detail": "Mom's Tablets & Brush", "category": "Home", "subcategory": "Misc.", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2025-12-16", "detail": "Kidney Stone - Check up & Medicine", "category": "Medical", "subcategory": "Tablets", "amount": 250.0, "bank": "BOB", "id": null}, {"date": "2025-12-17", "detail": "Hair Serum", "category": "Personal Expense", "subcategory": "Self Care", "amount": 130.0, "bank": "BOB", "id": null}, {"date": "2025-12-18", "detail": "Train ticket - Tapovan", "category": "Personal Expense", "subcategory": "Travel", "amount": 112.0, "bank": "BOB", "id": null}, {"date": "2025-12-17", "detail": "Cough Syrup & Cofsils", "category": "Medical", "subcategory": "Tablets", "amount": 72.0, "bank": "BOB", "id": null}, {"date": "2025-12-19", "detail": "Haircut & Beard", "category": "Personal Expense", "subcategory": "Self Care", "amount": 180.0, "bank": "BOB", "id": null}, {"date": "2025-12-20", "detail": "Mint", "category": "Personal Expense", "subcategory": "Food", "amount": 10.0, "bank": "BOB", "id": null}, {"date": "2025-12-21", "detail": "Train ticket - Panchvati", "category": "Personal Expense", "subcategory": "Travel", "amount": 112.25, "bank": "BOB", "id": null}, {"date": "2025-12-23", "detail": "Passport Size picture", "category": "Dubai", "subcategory": "Dubai - Documentation", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2025-12-23", "detail": "Chips", "category": "Personal Expense", "subcategory": "Food", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2025-12-24", "detail": "Chicken & Chips", "category": "Home", "subcategory": "Food", "amount": 383.0, "bank": "BOB", "id": null}, {"date": "2025-12-24", "detail": "Dahi", "category": "Home", "subcategory": "Groceries", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2025-12-24", "detail": "Passport Scan", "category": "Dubai", "subcategory": "Dubai - Documentation", "amount": 40.0, "bank": "BOB", "id": null}, {"date": "2025-12-22", "detail": "Alibag Trip", "category": "Personal Expense", "subcategory": "Fun", "amount": 3474.0, "bank": "Axis", "id": null}, {"date": "2025-12-11", "detail": "YT premium Subscription", "category": "Subscription", "subcategory": "YT Premium", "amount": 89.0, "bank": "BOB", "id": null}, {"date": "2026-06-14", "detail": "Kylaq - Petrol", "category": "Petrol", "subcategory": "Kylaq", "amount": 3857.0, "bank": "BOB", "id": null}, {"date": "2026-06-14", "detail": "Obssession - Movie", "category": "Personal Expense", "subcategory": "Fun", "amount": 183.0, "bank": "AU", "id": null}, {"date": "2026-06-14", "detail": "Galaxy - Movie Car Parking ", "category": "Personal Expense", "subcategory": "Fun", "amount": 50.0, "bank": "Axis", "id": null}, {"date": "2026-06-14", "detail": "Zomato - Hardasmal Thali", "category": "Personal Expense", "subcategory": "Food", "amount": 216.0, "bank": "BOB", "id": null}, {"date": "2026-06-15", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 68.0, "bank": "BOB", "id": null}, {"date": "2026-06-15", "detail": "Office Canteen Thali & Misc", "category": "Professional Expense", "subcategory": "Food", "amount": 202.0, "bank": "BOB", "id": null}, {"date": "2026-06-15", "detail": "Metro (vinay & Hiten) - Local AC", "category": "Professional Expense", "subcategory": "Travel", "amount": 175.0, "bank": "BOB", "id": null}, {"date": "2026-06-16", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 91.0, "bank": "BOB", "id": null}, {"date": "2026-06-16", "detail": "Water bottle", "category": "Personal Expense", "subcategory": "Food", "amount": 14.0, "bank": "BOB", "id": null}, {"date": "2026-06-16", "detail": "Office Canteen Thali", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-06-16", "detail": "Metro - Local (USA)", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-06-16", "detail": "Bellavita Perfume", "category": "Personal Expense", "subcategory": "Self Care", "amount": 555.0, "bank": "BOB", "id": null}, {"date": "2026-06-16", "detail": "Nidhi's Home Icecream", "category": "Personal Expense", "subcategory": "Food", "amount": 225.0, "bank": "BOB", "id": null}, {"date": "2026-06-17", "detail": "YT Premium Subscription", "category": "Subscription", "subcategory": "YT Premium", "amount": 89.0, "bank": "Axis", "id": null}, {"date": "2026-06-17", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 74.0, "bank": "BOB", "id": null}, {"date": "2026-06-17", "detail": "Water bottle", "category": "Personal Expense", "subcategory": "Food", "amount": 14.0, "bank": "BOB", "id": null}, {"date": "2026-06-17", "detail": "Office Canteen Thali", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-06-17", "detail": "Metro - Local - Riskshaw (USA)", "category": "Professional Expense", "subcategory": "Travel", "amount": 65.0, "bank": "BOB", "id": null}, {"date": "2026-06-17", "detail": "OnePlus Phone Cover", "category": "Personal Expense", "subcategory": "Misc.", "amount": 80.0, "bank": "BOB", "id": null}, {"date": "2026-06-17", "detail": "Groceries - Detergent, etc", "category": "Home - Mumbai", "subcategory": "Groceries", "amount": 92.0, "bank": "BOB", "id": null}, {"date": "2026-06-18", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 79.0, "bank": "BOB", "id": null}, {"date": "2026-06-18", "detail": "Bedr - Pg - Visting price", "category": "Home - Mumbai", "subcategory": "Misc.", "amount": 50.0, "bank": "BOB", "id": null}, {"date": "2026-06-18", "detail": "Office Canteen Thali", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-06-18", "detail": "PG Visit - Bedr (Chandiwala)", "category": "Home - Mumbai", "subcategory": "Misc.", "amount": 105.0, "bank": "BOB", "id": null}, {"date": "2026-06-18", "detail": "Metro - Local", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-06-19", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 79.0, "bank": "BOB", "id": null}, {"date": "2026-06-19", "detail": "Office Canteen Thali", "category": "Professional Expense", "subcategory": "Food", "amount": 140.0, "bank": "BOB", "id": null}, {"date": "2026-06-19", "detail": "PG Visit - Sher E Punjab", "category": "Home - Mumbai", "subcategory": "Misc.", "amount": 105.0, "bank": "BOB", "id": null}, {"date": "2026-06-19", "detail": "Metro - Local", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-06-19", "detail": "Chocolate cake - Station", "category": "Personal Expense", "subcategory": "Food", "amount": 20.0, "bank": "BOB", "id": null}, {"date": "2026-06-20", "detail": "Groceries - cleaning material", "category": "Home - Mumbai", "subcategory": "Groceries", "amount": 136.0, "bank": "BOB", "id": null}, {"date": "2026-06-20", "detail": "Pizza - 7 Eleven", "category": "Personal Expense", "subcategory": "Food", "amount": 150.0, "bank": "BOB", "id": null}, {"date": "2026-06-20", "detail": "Cocktail 2 - Movie Tickets", "category": "Personal Expense", "subcategory": "Fun", "amount": 128.0, "bank": "AU", "id": null}, {"date": "2026-06-20", "detail": "Dinner - Butter Chicken", "category": "Personal Expense", "subcategory": "Food", "amount": 550.0, "bank": "AU", "id": null}, {"date": "2026-06-21", "detail": "Nidhi - Bangles (Titvala)", "category": "Personal Expense", "subcategory": "Misc.", "amount": 80.0, "bank": "BOB", "id": null}, {"date": "2026-06-21", "detail": "Car - Parking (Titvala)", "category": "Personal Expense", "subcategory": "Misc.", "amount": 30.0, "bank": "BOB", "id": null}, {"date": "2026-06-21", "detail": "Chapati Parcel", "category": "Personal Expense", "subcategory": "Food", "amount": 48.0, "bank": "BOB", "id": null}, {"date": "2026-06-22", "detail": "Local - Rapido (Riskshaw)", "category": "Professional Expense", "subcategory": "Travel", "amount": 169.0, "bank": "BOB", "id": null}, {"date": "2026-06-22", "detail": "Office Canteen Thali", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-06-22", "detail": "Bike Insurance", "category": "Insurance", "subcategory": "Thunderbird", "amount": 1612.0, "bank": "AU", "id": null}, {"date": "2026-06-22", "detail": "Metro - Local", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-06-23", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 79.0, "bank": "BOB", "id": null}, {"date": "2026-06-23", "detail": "Re-exam Fee", "category": "Education", "subcategory": "Misc.", "amount": 1000.0, "bank": "AU", "id": null}, {"date": "2026-06-23", "detail": "Office Canteen Thali + Lassi", "category": "Professional Expense", "subcategory": "Food", "amount": 126.0, "bank": "BOB", "id": null}, {"date": "2026-06-23", "detail": "Metro - Local", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-06-23", "detail": "Zomato - Food", "category": "Personal Expense", "subcategory": "Food", "amount": 128.0, "bank": "BOB", "id": null}, {"date": "2026-06-23", "detail": "Kylaq - Petrol", "category": "Petrol", "subcategory": "Kylaq", "amount": 1200.0, "bank": "AU", "id": null}, {"date": "2026-06-24", "detail": "Riskhaw (Kalyan) - Local - Metro - Rapido", "category": "Professional Expense", "subcategory": "Travel", "amount": 104.0, "bank": "BOB", "id": null}, {"date": "2026-06-24", "detail": "Office Canteen Thali", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-06-24", "detail": "Paperboat + Saurabh's Desert", "category": "Personal Expense", "subcategory": "Food", "amount": 75.0, "bank": "BOB", "id": null}, {"date": "2026-06-24", "detail": "Metro - Local - Riskshaw (USA)", "category": "Professional Expense", "subcategory": "Travel", "amount": 65.0, "bank": "BOB", "id": null}, {"date": "2026-06-24", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 149.0, "bank": "AU", "id": null}, {"date": "2026-06-25", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 76.0, "bank": "BOB", "id": null}, {"date": "2026-06-25", "detail": "Office Canteen Thali", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-06-25", "detail": "Local - Panchavati", "category": "Professional Expense", "subcategory": "Travel", "amount": 54.0, "bank": "BOB", "id": null}, {"date": "2026-06-26", "detail": "Lunch", "category": "Personal Expense", "subcategory": "Food", "amount": 129.0, "bank": "BOB", "id": null}, {"date": "2026-06-26", "detail": "Dinner - Shawarma", "category": "Personal Expense", "subcategory": "Food", "amount": 215.0, "bank": "BOB", "id": null}, {"date": "2026-06-27", "detail": "Netflix Subscription ", "category": "Subscription", "subcategory": "Netflix", "amount": 199.0, "bank": "BOB", "id": null}, {"date": "2026-06-27", "detail": "Dinner & Snacks", "category": "Personal Expense", "subcategory": "Food", "amount": 177.0, "bank": "BOB", "id": null}, {"date": "2026-06-28", "detail": "Dinner-Swiggy", "category": "Personal Expense", "subcategory": "Food", "amount": 164.0, "bank": "BOB", "id": null}, {"date": "2026-06-29", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 81.0, "bank": "BOB", "id": null}, {"date": "2026-06-29", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 61.0, "bank": "BOB", "id": null}, {"date": "2026-06-29", "detail": "Metro - Local - Riskshaw (USA)", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-06-29", "detail": "Hit-Spray", "category": "Home - Mumbai", "subcategory": "Misc.", "amount": 110.0, "bank": "BOB", "id": null}, {"date": "2026-06-29", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 170.0, "bank": "BOB", "id": null}, {"date": "2026-06-30", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 81.0, "bank": "BOB", "id": null}, {"date": "2026-06-30", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-06-30", "detail": "Riskhaw - Panchvati - Rikshaw", "category": "Professional Expense", "subcategory": "Travel", "amount": 105.0, "bank": "BOB", "id": null}, {"date": "2026-06-30", "detail": "Office bag stich", "category": "Personal Expense", "subcategory": "Misc.", "amount": 20.0, "bank": "BOB", "id": null}, {"date": "2026-06-30", "detail": "Cloth Rope", "category": "Home - Mumbai", "subcategory": "Misc.", "amount": 100.0, "bank": "BOB", "id": null}, {"date": "2026-07-01", "detail": "Petrol - Thunderbird", "category": "Petrol", "subcategory": "Thunderbird", "amount": 568.0, "bank": "BOB", "id": null}, {"date": "2026-07-01", "detail": "Lunch", "category": "Personal Expense", "subcategory": "Food", "amount": 167.0, "bank": "BOB", "id": null}, {"date": "2026-07-01", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 193.0, "bank": "BOB", "id": null}, {"date": "2026-07-02", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 81.0, "bank": "BOB", "id": null}, {"date": "2026-07-02", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-07-02", "detail": "Water bottle", "category": "Personal Expense", "subcategory": "Food", "amount": 14.0, "bank": "BOB", "id": null}, {"date": "2026-07-02", "detail": "Metro - Local - Riskshaw (USA)", "category": "Professional Expense", "subcategory": "Travel", "amount": 65.0, "bank": "BOB", "id": null}, {"date": "2026-07-02", "detail": "Car Parking - Saikamal", "category": "Home - Mumbai", "subcategory": "Kylaq", "amount": 500.0, "bank": "BOB", "id": null}, {"date": "2026-07-03", "detail": "Local - Metro - Rapido (office)", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-07-03", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "BOB", "id": null}, {"date": "2026-07-03", "detail": "Metro - Local (Mitali & Hiten)", "category": "Personal Expense", "subcategory": "Travel", "amount": 90.0, "bank": "BOB", "id": null}, {"date": "2026-07-03", "detail": "Water bottle", "category": "Personal Expense", "subcategory": "Food", "amount": 14.0, "bank": "BOB", "id": null}, {"date": "2026-07-03", "detail": "Rikshaw Travel - Saikamal (Vinayak, MItali & Hiten)", "category": "Personal Expense", "subcategory": "Travel", "amount": 90.0, "bank": "BOB", "id": null}, {"date": "2026-07-03", "detail": "Mcdonalds - Dinner (Nidhi & HIten)", "category": "Personal Expense", "subcategory": "Food", "amount": 214.0, "bank": "BOB", "id": null}, {"date": "2026-07-04", "detail": "Thunderbird - Brake OIl", "category": "Vehicle Repair / Maintainance", "subcategory": "Thunderbird", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2026-07-04", "detail": "Sighar Mithai", "category": "Personal Expense", "subcategory": "Food", "amount": 110.0, "bank": "BOB", "id": null}, {"date": "2026-07-05", "detail": "Rent - Pg (Rent + Agreement)", "category": "Home - Mumbai", "subcategory": "Rent", "amount": 14100.0, "bank": "AU", "id": null}, {"date": "2026-07-05", "detail": "Cab - Home Shifting", "category": "Home - Mumbai", "subcategory": "Shifting", "amount": 1060.0, "bank": "HSBC", "id": null}, {"date": "2026-07-05", "detail": "Petrol - Thunderbird", "category": "Petrol", "subcategory": "Thunderbird", "amount": 558.0, "bank": "BOB", "id": null}, {"date": "2026-07-05", "detail": "Thunderbird - PUC", "category": "Vehicle Repair / Maintainance", "subcategory": "Misc.", "amount": 50.0, "bank": "BOB", "id": null}, {"date": "2026-07-05", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 303.0, "bank": "BOB", "id": null}, {"date": "2026-07-05", "detail": "Handwash & Detergent", "category": "Home - Mumbai", "subcategory": "Misc.", "amount": 171.0, "bank": "BOB", "id": null}, {"date": "2026-07-06", "detail": "Lunch", "category": "Personal Expense", "subcategory": "Food", "amount": 127.0, "bank": "BOB", "id": null}, {"date": "2026-07-06", "detail": "Vinayak - Balance (USA Outings)", "category": "Personal Expense", "subcategory": "Fun", "amount": 932.0, "bank": "HSBC", "id": null}, {"date": "2026-07-07", "detail": "Rikshaw Office Travel", "category": "Professional Expense", "subcategory": "Travel", "amount": 70.0, "bank": "Axis", "id": null}, {"date": "2026-07-07", "detail": "Chewing Gum", "category": "Personal Expense", "subcategory": "Food", "amount": 45.0, "bank": "BOB", "id": null}, {"date": "2026-07-07", "detail": "Food", "category": "Professional Expense", "subcategory": "Food", "amount": 130.0, "bank": "BOB", "id": null}, {"date": "2026-07-07", "detail": "Uber - Bike", "category": "Professional Expense", "subcategory": "Travel", "amount": 43.0, "bank": "BOB", "id": null}, {"date": "2026-07-07", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 95.0, "bank": "HSBC", "id": null}, {"date": "2026-07-08", "detail": "Face-Wash", "category": "Personal Expense", "subcategory": "Self Care", "amount": 299.0, "bank": "HSBC", "id": null}, {"date": "2026-07-08", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 140.0, "bank": "HSBC", "id": null}, {"date": "2026-07-08", "detail": "Sumo-Cold Tablet", "category": "Medical", "subcategory": "Tablets", "amount": 50.0, "bank": "HSBC", "id": null}, {"date": "2026-07-08", "detail": "Samosa", "category": "Personal Expense", "subcategory": "Food", "amount": 25.0, "bank": "HSBC", "id": null}, {"date": "2026-07-08", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 193.0, "bank": "HSBC", "id": null}, {"date": "2026-07-09", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "HSBC", "id": null}, {"date": "2026-07-09", "detail": "Evening Snacks", "category": "Personal Expense", "subcategory": "Food", "amount": 40.0, "bank": "HSBC", "id": null}, {"date": "2026-07-09", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 131.0, "bank": "HSBC", "id": null}, {"date": "2026-07-10", "detail": "Metro (Jyotsana & Hiten) & Local", "category": "Personal Expense", "subcategory": "Travel", "amount": 74.0, "bank": "BOB", "id": null}, {"date": "2026-07-10", "detail": "Water bottle", "category": "Personal Expense", "subcategory": "Food", "amount": 14.0, "bank": "BOB", "id": null}, {"date": "2026-07-10", "detail": "Kylaq - Petrol", "category": "Petrol", "subcategory": "Kylaq", "amount": 1200.0, "bank": "HSBC", "id": null}, {"date": "2026-07-10", "detail": "Recharge - Jio", "category": "Phone Repair / Recharge", "subcategory": "Jio", "amount": 350.0, "bank": "BOB", "id": null}, {"date": "2026-07-11", "detail": "Haircut", "category": "Personal Expense", "subcategory": "Self Care", "amount": 250.0, "bank": "HSBC", "id": null}, {"date": "2026-07-11", "detail": "Vinayak - Razor", "category": "Personal Expense", "subcategory": "Misc.", "amount": 25.0, "bank": "HSBC", "id": null}, {"date": "2026-07-11", "detail": "Mandir", "category": "Personal Expense", "subcategory": "Misc.", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2026-07-11", "detail": "OnePlus Charging Cable", "category": "Phone Repair / Recharge", "subcategory": "OnePlus", "amount": 730.0, "bank": "HSBC", "id": null}, {"date": "2026-07-11", "detail": "Food", "category": "Home", "subcategory": "Food", "amount": 158.0, "bank": "BOB", "id": null}, {"date": "2026-07-11", "detail": "Movie - Car Parking", "category": "Personal Expense", "subcategory": "Fun", "amount": 40.0, "bank": "BOB", "id": null}, {"date": "2026-07-11", "detail": "Movie Ticket", "category": "Personal Expense", "subcategory": "Fun", "amount": 194.0, "bank": "AU", "id": null}, {"date": "2026-07-12", "detail": "Train Tickets - Mumbai", "category": "Professional Expense", "subcategory": "Travel", "amount": 131.0, "bank": "BOB", "id": null}, {"date": "2026-07-12", "detail": "Chinese - Food", "category": "Personal Expense", "subcategory": "Fun", "amount": 210.0, "bank": "BOB", "id": null}, {"date": "2026-07-13", "detail": "Dinner", "category": "Personal Expense", "subcategory": "OnePlus", "amount": 730.0, "bank": "HSBC", "id": null}, {"date": "2026-07-14", "detail": "Lunch (Chips+Dahi+Lassi)", "category": "Professional Expense", "subcategory": "Food", "amount": 80.0, "bank": "HSBC", "id": null}, {"date": "2026-07-14", "detail": "Thunderbird - Brake OIl", "category": "Vehicle Repair / Maintainance", "subcategory": "Thunderbird", "amount": 125.0, "bank": "BOB", "id": null}, {"date": "2026-07-14", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 147.0, "bank": "HSBC", "id": null}, {"date": "2026-07-15", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 70.0, "bank": "HSBC", "id": null}, {"date": "2026-07-15", "detail": "Nashik Panchavati Ticket", "category": "Personal Expense", "subcategory": "Travel", "amount": 132.0, "bank": "BOB", "id": null}, {"date": "2026-07-15", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 385.0, "bank": "HSBC", "id": null}, {"date": "2026-07-16", "detail": "Office Travel", "category": "Professional Expense", "subcategory": "Travel", "amount": 51.0, "bank": "HSBC", "id": null}, {"date": "2026-07-16", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 120.0, "bank": "HSBC", "id": null}, {"date": "2026-07-16", "detail": "Local - Rikshaw", "category": "Professional Expense", "subcategory": "Travel", "amount": 36.0, "bank": "HSBC", "id": null}, {"date": "2026-07-16", "detail": "Water bottle", "category": "Personal Expense", "subcategory": "Food", "amount": 14.0, "bank": "HSBC", "id": null}, {"date": "2026-07-17", "detail": "Netflix - Subscription", "category": "Subscription", "subcategory": "Netflix", "amount": 199.0, "bank": "BOB", "id": null}, {"date": "2026-07-17", "detail": "Mom - Tablet", "category": "Home", "subcategory": "Tablets", "amount": 14.0, "bank": "BOB", "id": null}, {"date": "2026-07-17", "detail": "Dipesh's Birthday Cake", "category": "Personal Expense", "subcategory": "Misc.", "amount": 60.0, "bank": "BOB", "id": null}, {"date": "2026-07-19", "detail": "Shawarma - Cafe 99", "category": "Personal Expense", "subcategory": "Food", "amount": 60.0, "bank": "Axis", "id": null}, {"date": "2026-07-19", "detail": "Dairy don Icecream", "category": "Personal Expense", "subcategory": "Food", "amount": 61.0, "bank": "Axis", "id": null}, {"date": "2026-07-20", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 65.0, "bank": "HSBC", "id": null}, {"date": "2026-07-20", "detail": "Mumbai Panchvati Ticket", "category": "Personal Expense", "subcategory": "Travel", "amount": 93.0, "bank": "BOB", "id": null}, {"date": "2026-07-20", "detail": "Uber - Bike", "category": "Professional Expense", "subcategory": "Travel", "amount": 45.0, "bank": "HSBC", "id": null}, {"date": "2026-07-20", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 209.0, "bank": "HSBC", "id": null}, {"date": "2026-07-21", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 110.0, "bank": "HSBC", "id": null}, {"date": "2026-07-21", "detail": "Krishanu - Medicine", "category": "Personal Expense", "subcategory": "Misc.", "amount": 55.0, "bank": "BOB", "id": null}, {"date": "2026-07-21", "detail": "Gundavali Metro", "category": "Professional Expense", "subcategory": "Travel", "amount": 10.0, "bank": "HSBC", "id": null}, {"date": "2026-07-22", "detail": "Bike - Chain Lube and Micro-fiber cloth", "category": "Vehicle Repair / Maintainance", "subcategory": "Thunderbird", "amount": 211.0, "bank": "HSBC", "id": null}, {"date": "2026-07-22", "detail": "Rikshaw", "category": "Professional Expense", "subcategory": "Travel", "amount": 77.0, "bank": "HSBC", "id": null}, {"date": "2026-07-22", "detail": "Lunch", "category": "Professional Expense", "subcategory": "Food", "amount": 140.0, "bank": "HSBC", "id": null}, {"date": "2026-07-22", "detail": "Dinner with Mitali", "category": "Personal Expense", "subcategory": "Food", "amount": 339.0, "bank": "HSBC", "id": null}, {"date": "2026-07-23", "detail": "Rikshaw - Office", "category": "Professional Expense", "subcategory": "Travel", "amount": 80.0, "bank": "HSBC", "id": null}, {"date": "2026-07-23", "detail": "Lunch - Mani's Cafe", "category": "Personal Expense", "subcategory": "Food", "amount": 150.0, "bank": "HSBC", "id": null}, {"date": "2026-07-23", "detail": "Uber - Bike", "category": "Professional Expense", "subcategory": "Travel", "amount": 55.0, "bank": "HSBC", "id": null}, {"date": "2026-07-23", "detail": "Evening Snacks", "category": "Personal Expense", "subcategory": "Food", "amount": 75.0, "bank": "HSBC", "id": null}, {"date": "2026-07-23", "detail": "Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 113.0, "bank": "HSBC", "id": null}, {"date": "2026-07-24", "detail": "Rikshaw - Office", "category": "Professional Expense", "subcategory": "Travel", "amount": 75.0, "bank": "HSBC", "id": null}, {"date": "2026-07-24", "detail": "Lunch & Soda", "category": "Personal Expense", "subcategory": "Food", "amount": 150.0, "bank": "HSBC", "id": null}, {"date": "2026-07-24", "detail": "Office - Travel", "category": "Personal Expense", "subcategory": "Travel", "amount": 62.0, "bank": "HSBC", "id": null}, {"date": "2026-07-24", "detail": "Dinner - Shawarma", "category": "Personal Expense", "subcategory": "Food", "amount": 188.0, "bank": "HSBC", "id": null}, {"date": "2026-07-25", "detail": "Ulhasnagar Cab for Shifting", "category": "Personal Expense", "subcategory": "Shifting", "amount": 950.0, "bank": "HSBC", "id": null}, {"date": "2026-07-25", "detail": "Water & Chips", "category": "Personal Expense", "subcategory": "Food", "amount": 122.0, "bank": "HSBC", "id": null}, {"date": "2026-07-25", "detail": "Lunch - Nidhi & Hiten", "category": "Personal Expense", "subcategory": "Food", "amount": 280.0, "bank": "HSBC", "id": null}, {"date": "2026-07-26", "detail": "Home - USA", "category": "Personal Expense", "subcategory": "Food", "amount": 223.0, "bank": "HSBC", "id": null}, {"date": "2026-07-26", "detail": "Lunch", "category": "Personal Expense", "subcategory": "Food", "amount": 152.0, "bank": "HSBC", "id": null}, {"date": "2026-07-26", "detail": "Chai - Nana Guest", "category": "Personal Expense", "subcategory": "Food", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2026-08-02", "detail": "Panchavati Ticket-Mumbai", "category": "Professional Expense", "subcategory": "Travel", "amount": 132.25, "bank": "BOB", "id": null}, {"date": "2026-08-02", "detail": "Home Groceries", "category": "Home", "subcategory": "Groceries", "amount": 70.0, "bank": "BOB", "id": null}, {"date": "2026-08-02", "detail": "Evening snacks", "category": "Home", "subcategory": "Food", "amount": 137.0, "bank": "BOB", "id": null}, {"date": "2026-08-03", "detail": "Local Ticket - Dadar to Vile Parle ", "category": "Professional Expense", "subcategory": "Travel", "amount": 5.0, "bank": "BOB", "id": null}, {"date": "2026-08-03", "detail": "Rishaw - Office", "category": "Personal Expense", "subcategory": "Travel", "amount": 29.0, "bank": "BOB", "id": null}, {"date": "2026-08-03", "detail": "Rapido - USA", "category": "Professional Expense", "subcategory": "Travel", "amount": 38.0, "bank": "BOB", "id": null}, {"date": "2026-08-03", "detail": "Metro - USA", "category": "Professional Expense", "subcategory": "Travel", "amount": 30.0, "bank": "HSBC", "id": null}, {"date": "2026-08-03", "detail": "Hardasmal - Dinner", "category": "Personal Expense", "subcategory": "Food", "amount": 150.0, "bank": "BOB", "id": null}, {"date": "2026-08-04", "detail": "Metro - Office", "category": "Professional Expense", "subcategory": "Travel", "amount": 132.25, "bank": "BOB", "id": null}];
+</script>
+
+<script>
+let TXNS = [];
+let currentView = 'overview';
+let currentMonth = 'all';
+let trendChart = null;
+let openCats = new Set();
+let pollTimer = null;
+
+const money = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const escapeHtml = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+/* ---------------- PIN lock ---------------- */
+let enteredPin = '';
+function updatePinDots(){
+  document.querySelectorAll('.pin-dot').forEach((d,i)=>{ d.classList.toggle('filled', i < enteredPin.length); d.classList.remove('error'); });
+}
+function shakeError(){
+  document.querySelectorAll('.pin-dot').forEach(d=>d.classList.add('error'));
+  document.getElementById('lockError').classList.add('show');
+  setTimeout(()=>{ enteredPin=''; updatePinDots(); document.getElementById('lockError').classList.remove('show'); }, 550);
+}
+document.getElementById('keypad').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.key');
+  if(!btn) return;
+  const k = btn.dataset.k;
+  if(k === 'del'){ enteredPin = enteredPin.slice(0,-1); updatePinDots(); return; }
+  if(enteredPin.length >= 4) return;
+  enteredPin += k;
+  updatePinDots();
+  if(enteredPin.length === 4){
+    if(enteredPin === PASSCODE){ sessionStorage.setItem('ledger_unlocked','1'); unlockApp(); }
+    else{ shakeError(); }
+  }
+});
+function unlockApp(){
+  document.getElementById('lockScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  startApp();
+}
+if(sessionStorage.getItem('ledger_unlocked') === '1'){ unlockApp(); }
+
+/* ---------------- Google Sheet data layer ---------------- */
+async function apiGet(){
+  const res = await fetch(WEB_APP_URL, { method: 'GET' });
+  if(!res.ok) throw new Error('GET failed');
+  return res.json();
+}
+async function apiPost(payload){
+  const res = await fetch(WEB_APP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  if(!res.ok) throw new Error('POST failed');
+  return res.json();
+}
+
+async function startApp(){
+  if(!WEB_APP_URL || WEB_APP_URL.indexOf('PASTE_YOUR') === 0){
+    document.getElementById('content').innerHTML = '<div class="empty"><p>Your Google Sheet link isn\'t set yet.<br>Paste your Apps Script Web App URL into the script and reload.</p></div>';
+    return;
+  }
+  await refreshFromSheet(true);
+  pollTimer = setInterval(()=>refreshFromSheet(false), 15000);
+}
+
+async function refreshFromSheet(isFirstLoad){
+  try{
+    let rows = await apiGet();
+    if(isFirstLoad && (!rows || rows.length === 0) && typeof SEED !== 'undefined'){
+      await apiPost({ action:'seed', rows: SEED });
+      rows = await apiGet();
+    }
+    TXNS = rows.map(r => ({ ...r, amount: parseFloat(r.amount) || 0 }));
+    renderAll();
+  }catch(e){
+    console.error(e);
+    if(isFirstLoad){
+      document.getElementById('content').innerHTML = '<div class="empty"><p>Could not reach your Google Sheet.<br>Check the Web App URL and that it is deployed with "Anyone" access.</p></div>';
+    } else {
+      showToast('Sync failed — will retry');
+    }
+  }
+}
+
+/* ---------------- helpers ---------------- */
+function monthKey(d){ return d ? d.slice(0,7) : 'unknown'; }
+function monthLabel(key){
+  if(key==='all') return 'All time';
+  const [y,m] = key.split('-');
+  return new Date(parseInt(y), parseInt(m)-1, 1).toLocaleDateString('en-IN',{month:'short', year:'numeric'});
+}
+function getMonths(){ return Array.from(new Set(TXNS.map(t=>monthKey(t.date)))).filter(k=>k!=='unknown').sort().reverse(); }
+function getCategories(){ return Array.from(new Set(TXNS.map(t=>t.category).filter(Boolean))).sort(); }
+function getSubcategories(cat){
+  const f = cat ? TXNS.filter(t=>t.category===cat) : TXNS;
+  return Array.from(new Set(f.map(t=>t.subcategory).filter(Boolean))).sort();
+}
+function getBanks(){ return Array.from(new Set(TXNS.map(t=>t.bank).filter(Boolean))).sort(); }
+
+function renderMonthSelect(){
+  const sel = document.getElementById('monthSelect');
+  const months = getMonths();
+  sel.innerHTML = '<option value="all">All time</option>' + months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');
+  sel.value = currentMonth;
+}
+function monthTxns(){ return currentMonth==='all' ? TXNS : TXNS.filter(t=>monthKey(t.date)===currentMonth); }
+function renderHeaderCount(){
+  const t = monthTxns();
+  document.getElementById('entryCount').innerHTML = `<span class="sync-dot"></span>${t.length} entries · ${money(t.reduce((s,x)=>s+x.amount,0))}`;
+}
+
+/* ---------------- OVERVIEW ---------------- */
+function renderOverview(){
+  const txns = monthTxns();
+  const content = document.getElementById('content');
+  if(txns.length===0){ content.innerHTML = '<div class="empty"><p>No entries for this period yet.</p></div>'; return; }
+  const total = txns.reduce((s,t)=>s+t.amount,0);
+  const days = new Set(txns.map(t=>t.date)).size || 1;
+
+  const catMap = {};
+  txns.forEach(t=>{
+    const c = t.category || 'Uncategorised', s = t.subcategory || '—';
+    catMap[c] = catMap[c] || {total:0, subs:{}};
+    catMap[c].total += t.amount;
+    catMap[c].subs[s] = (catMap[c].subs[s]||0) + t.amount;
+  });
+  const catEntries = Object.entries(catMap).sort((a,b)=>b[1].total-a[1].total);
+
+  const byCat = {}; txns.forEach(t=>{ const c=t.category||'Uncategorised'; byCat[c]=(byCat[c]||0)+t.amount; });
+  const catRank = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+
+  const bySub = {}; txns.forEach(t=>{ const s=t.subcategory||'—'; bySub[s]=(bySub[s]||0)+t.amount; });
+  const subRank = Object.entries(bySub).sort((a,b)=>b[1]-a[1]);
+
+  const byBank = {}; txns.forEach(t=>{ if(t.bank) byBank[t.bank]=(byBank[t.bank]||0)+t.amount; });
+  const bankRank = Object.entries(byBank).sort((a,b)=>b[1]-a[1]);
+
+  content.innerHTML = `
+    <div class="stat-strip">
+      <div class="stat-box"><div class="label">Total</div><div class="value">${money(total)}</div></div>
+      <div class="stat-box"><div class="label">Daily avg</div><div class="value">${money(total/days)}</div></div>
+      <div class="stat-box"><div class="label">Entries</div><div class="value">${txns.length}</div></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>Category &amp; Sub Category</h2><span class="meta">${catEntries.length} categories</span></div>
+      <div class="panel">
+        ${catEntries.map(([cat, data])=>{
+          const isOpen = openCats.has(cat);
+          const subEntries = Object.entries(data.subs).sort((a,b)=>b[1]-a[1]);
+          const maxSub = Math.max(...subEntries.map(e=>e[1]),1);
+          return `<div class="cat-group">
+            <div class="cat-head ${isOpen?'open':''}" data-cat="${escapeHtml(cat)}">
+              <div class="left"><span class="chev">▶</span><span class="cname">${escapeHtml(cat)}</span></div>
+              <span class="ctotal">${money(data.total)}</span>
+            </div>
+            <div class="sub-list ${isOpen?'open':''}">
+              ${subEntries.map(([s,val])=>`<div class="sub-row">
+                <div class="sname">${escapeHtml(s)}</div>
+                <div class="rank-track"><div class="rank-fill" style="width:${(val/maxSub*100).toFixed(1)}%"></div></div>
+                <div class="samt">${money(val)}</div></div>`).join('')}
+            </div></div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="section"><div class="section-head"><h2>By Category</h2><span class="meta">${catRank.length}</span></div>
+      <div class="panel">${rankRowsHtml(catRank, total)}</div></div>
+    <div class="section"><div class="section-head"><h2>By Sub Category</h2><span class="meta">${subRank.length}</span></div>
+      <div class="panel">${rankRowsHtml(subRank, total)}</div></div>
+    <div class="section"><div class="section-head"><h2>By Bank</h2><span class="meta">${bankRank.length}</span></div>
+      <div class="panel">${bankRank.length ? rankRowsHtml(bankRank, total) : '<div style="padding:14px 0;color:var(--ink-faint);font-size:12px;">No bank data for this period.</div>'}</div></div>
+  `;
+  content.querySelectorAll('.cat-head').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const cat = el.dataset.cat;
+      if(openCats.has(cat)) openCats.delete(cat); else openCats.add(cat);
+      renderOverview();
+    });
+  });
+}
+function rankRowsHtml(entries, total){
+  const maxVal = Math.max(...entries.map(e=>e[1]),1);
+  return entries.map(([name,val])=>`<div class="rank-row">
+    <div class="name">${escapeHtml(name)}</div>
+    <div class="rank-track"><div class="rank-fill" style="width:${(val/maxVal*100).toFixed(1)}%"></div></div>
+    <div class="pct">${((val/total)*100).toFixed(0)}%</div>
+    <div class="amt">${money(val)}</div></div>`).join('');
+}
+
+/* ---------------- DAILY EXPENSES ---------------- */
+function renderDaily(){
+  const content = document.getElementById('content');
+  const search = (document.getElementById('dailySearch')?.value || '').toLowerCase();
+  const catF = document.getElementById('dailyCat')?.value || '';
+  const bankF = document.getElementById('dailyBank')?.value || '';
+
+  let txns = monthTxns().filter(t=>{
+    if(catF && t.category!==catF) return false;
+    if(bankF && t.bank!==bankF) return false;
+    if(search && !(t.detail||'').toLowerCase().includes(search) && !(t.category||'').toLowerCase().includes(search) && !(t.subcategory||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  let filterHtml = `<div class="filter-row">
+    <input class="search" id="dailySearch" placeholder="Search detail…" value="${escapeHtml(search)}">
+    <select class="filter" id="dailyCat"><option value="">All categories</option>${getCategories().map(c=>`<option value="${c}" ${c===catF?'selected':''}>${c}</option>`).join('')}</select>
+    <select class="filter" id="dailyBank"><option value="">All banks</option>${getBanks().map(b=>`<option value="${b}" ${b===bankF?'selected':''}>${b}</option>`).join('')}</select>
+  </div>`;
+
+  if(txns.length===0){
+    content.innerHTML = filterHtml + '<div class="empty"><p>No entries match this filter.</p></div>';
+    attachDailyFilterListeners();
+    return;
+  }
+  const byDate = {};
+  txns.forEach(t=>{ (byDate[t.date]=byDate[t.date]||[]).push(t); });
+  const dates = Object.keys(byDate).sort().reverse();
+  let listHtml = '';
+  dates.forEach(date=>{
+    const items = byDate[date].sort((a,b)=>(b.id||'').localeCompare(a.id||''));
+    const total = items.reduce((s,t)=>s+t.amount,0);
+    const d = date ? new Date(date+'T00:00:00') : null;
+    const dayName = d ? d.toLocaleDateString('en-IN',{weekday:'short'}) : '';
+    const dayNum = d ? d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : 'Unknown date';
+    listHtml += `<div class="day-block"><div class="day-head"><div><span class="d1">${dayName}</span><span class="d2">${dayNum}</span></div><div class="total">${money(total)}</div></div>`;
+    items.forEach(t=>{
+      listHtml += `<div class="txn" data-id="${t.id}">
+        <div class="mid"><div class="detail">${escapeHtml(t.detail || '(no detail)')}</div>
+        <div class="tags">${escapeHtml(t.category)}${t.subcategory ? ' · '+escapeHtml(t.subcategory) : ''}${t.bank ? `<span class="bank-pill">${escapeHtml(t.bank)}</span>` : ''}</div></div>
+        <div class="amt">${money(t.amount)}</div><div class="edit-icon">✎</div></div>`;
+    });
+    listHtml += `</div>`;
+  });
+  content.innerHTML = filterHtml + listHtml;
+  attachDailyFilterListeners();
+  content.querySelectorAll('.txn').forEach(el=> el.addEventListener('click', ()=>openEdit(el.dataset.id)));
+}
+function attachDailyFilterListeners(){
+  document.getElementById('dailySearch')?.addEventListener('input', renderDaily);
+  document.getElementById('dailyCat')?.addEventListener('change', renderDaily);
+  document.getElementById('dailyBank')?.addEventListener('change', renderDaily);
+}
+
+/* ---------------- DAILY TOTALS ---------------- */
+function renderTotals(){
+  const content = document.getElementById('content');
+  const txns = monthTxns();
+  if(txns.length===0){ content.innerHTML = '<div class="empty"><p>No entries for this period yet.</p></div>'; return; }
+  const byDate = {};
+  txns.forEach(t=>{ byDate[t.date] = byDate[t.date] || {total:0,count:0}; byDate[t.date].total += t.amount; byDate[t.date].count += 1; });
+  const dates = Object.keys(byDate).sort();
+  const maxVal = Math.max(...dates.map(d=>byDate[d].total),1);
+
+  let html = '<canvas id="trendChart" height="140"></canvas><div class="panel">';
+  dates.slice().reverse().forEach(date=>{
+    const d = new Date(date+'T00:00:00');
+    const dayName = d.toLocaleDateString('en-IN',{weekday:'short'});
+    const dayNum = d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+    const info = byDate[date];
+    html += `<div class="totals-row"><div class="date"><div class="d1">${dayNum}</div><div class="d2">${dayName} · ${info.count} entr${info.count===1?'y':'ies'}</div></div>
+      <div class="rank-track"><div class="rank-fill" style="width:${(info.total/maxVal*100).toFixed(1)}%"></div></div>
+      <div class="amt">${money(info.total)}</div></div>`;
+  });
+  html += '</div>';
+  content.innerHTML = html;
+
+  const ctx = document.getElementById('trendChart');
+  if(trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, {
+    type:'line',
+    data: {
+      labels: dates.map(d=> new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})),
+      datasets: [{ data: dates.map(d=>byDate[d].total), borderColor:'#C6A15B', backgroundColor:'#C6A15B22', fill:true, tension:0.3, pointRadius:0, borderWidth:2 }]
+    },
+    options: {
+      plugins: { legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>' '+money(c.parsed.y) } } },
+      scales: {
+        x: { ticks:{ font:{family:'Manrope', size:9}, color:'#5E5B54', maxTicksLimit:6 }, grid:{ display:false } },
+        y: { ticks:{ font:{family:'Manrope', size:9}, color:'#5E5B54' }, grid:{ color:'#232329' } }
+      }
+    }
+  });
+}
+
+function renderAll(){
+  renderMonthSelect(); renderHeaderCount();
+  if(currentView==='overview') renderOverview();
+  else if(currentView==='daily') renderDaily();
+  else renderTotals();
+}
+
+/* ---------------- add / edit sheet ---------------- */
+function openAdd(){
+  document.getElementById('sheetTitle').textContent = 'New Entry';
+  document.getElementById('editId').value = '';
+  document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('fAmount').value = '';
+  document.getElementById('fDetail').value = '';
+  document.getElementById('fCategory').value = '';
+  document.getElementById('fSubcategory').value = '';
+  document.getElementById('fBank').value = getBanks()[0] || '';
+  document.getElementById('deleteBtn').style.display = 'none';
+  refreshDatalists();
+  document.getElementById('sheetBackdrop').classList.add('open');
+}
+function openEdit(id){
+  const t = TXNS.find(x=>x.id===id);
+  if(!t) return;
+  document.getElementById('sheetTitle').textContent = 'Edit Entry';
+  document.getElementById('editId').value = id;
+  document.getElementById('fDate').value = t.date || '';
+  document.getElementById('fAmount').value = t.amount;
+  document.getElementById('fDetail').value = t.detail || '';
+  document.getElementById('fCategory').value = t.category || '';
+  document.getElementById('fSubcategory').value = t.subcategory || '';
+  document.getElementById('fBank').value = t.bank || '';
+  document.getElementById('deleteBtn').style.display = 'block';
+  refreshDatalists();
+  document.getElementById('sheetBackdrop').classList.add('open');
+}
+function closeSheet(){ document.getElementById('sheetBackdrop').classList.remove('open'); }
+function refreshDatalists(){
+  document.getElementById('categoryList').innerHTML = getCategories().map(c=>`<option value="${c}">`).join('');
+  document.getElementById('subcategoryList').innerHTML = getSubcategories(document.getElementById('fCategory').value).map(c=>`<option value="${c}">`).join('');
+  document.getElementById('bankList').innerHTML = getBanks().map(c=>`<option value="${c}">`).join('');
+}
+async function saveEntry(){
+  const id = document.getElementById('editId').value;
+  const amount = parseFloat(document.getElementById('fAmount').value);
+  if(!amount || amount<=0){ showToast('Enter a valid amount'); return; }
+  const date = document.getElementById('fDate').value;
+  if(!date){ showToast('Pick a date'); return; }
+  const entry = {
+    id: id || undefined,
+    date,
+    detail: document.getElementById('fDetail').value.trim(),
+    category: document.getElementById('fCategory').value.trim() || 'Uncategorised',
+    subcategory: document.getElementById('fSubcategory').value.trim(),
+    amount, bank: document.getElementById('fBank').value.trim()
+  };
+  try{
+    if(id){ await apiPost({ action:'update', ...entry }); }
+    else{ await apiPost({ action:'add', ...entry }); }
+    closeSheet();
+    showToast(id ? 'Entry updated' : 'Entry added');
+    await refreshFromSheet(false);
+  }catch(e){ console.error(e); showToast('Save failed — check connection'); }
+}
+async function deleteEntry(){
+  const id = document.getElementById('editId').value;
+  if(!id) return;
+  try{
+    await apiPost({ action:'delete', id });
+    closeSheet();
+    showToast('Entry deleted');
+    await refreshFromSheet(false);
+  }catch(e){ console.error(e); showToast('Delete failed — check connection'); }
+}
+
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    renderAll();
+  });
+});
+document.getElementById('monthSelect').addEventListener('change', (e)=>{ currentMonth = e.target.value; renderAll(); });
+document.getElementById('fabAdd').addEventListener('click', openAdd);
+document.getElementById('sheetClose').addEventListener('click', closeSheet);
+document.getElementById('cancelBtn').addEventListener('click', closeSheet);
+document.getElementById('saveBtn').addEventListener('click', saveEntry);
+document.getElementById('deleteBtn').addEventListener('click', deleteEntry);
+document.getElementById('sheetBackdrop').addEventListener('click', (e)=>{ if(e.target.id==='sheetBackdrop') closeSheet(); });
+document.getElementById('fCategory').addEventListener('input', ()=>{
+  document.getElementById('subcategoryList').innerHTML = getSubcategories(document.getElementById('fCategory').value).map(c=>`<option value="${c}">`).join('');
+});
+</script>
+</body>
+</html>
